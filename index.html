@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ÑATO TV Ultimate</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+    <style>
+        body { margin: 0; background: #000; font-family: sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #player-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #000; }
+        video { width: 100%; height: 100%; }
+        #menu { height: 150px; background: #111; overflow-x: auto; display: flex; padding: 10px; gap: 10px; border-top: 2px solid #ed1c24; }
+        .canal-card { min-width: 120px; background: #222; border-radius: 8px; padding: 5px; text-align: center; cursor: pointer; border: 1px solid #333; }
+        .canal-card:hover { background: #ed1c24; }
+        .canal-card img { width: 50px; height: 50px; object-fit: contain; }
+        .canal-card p { font-size: 12px; margin: 5px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    </style>
+</head>
+<body>
+
+    <div id="player-container">
+        <video id="video" controls autoplay crossorigin="anonymous"></video>
+    </div>
+
+    <div id="menu">
+        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c3eds/AmericaTV/SA_Live_dash_enc_C/AmericaTV.mpd', '8ea235ce0826408b221c498115a9b62d', '7aa9266ed91ea4510483370029dfcf45')">
+            <img src="https://static.flow.com.ar/images/66/CH_LOGO/60/40/0/0/60528493072631.png">
+            <p>América</p>
+        </div>
+
+        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c6eds/TelefeHD/SA_Live_dash_enc_C/TelefeHD.mpd', '3cec1b1ea9799dda5596e64f37e5ed20', 'c69f3afde2085dcaaaddbf55246a0323')">
+            <img src="https://static.flow.com.ar/images/69/CH_LOGO/60/40/0/0/65442435072354.png">
+            <p>Telefe</p>
+        </div>
+
+        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c7eds/Fox_Sports_Premiun_HD/SA_Live_dash_enc_C/Fox_Sports_Premiun_HD.mpd', '4c230dbc7f6a4bfa6ad0aa73ff792374', '4186a7c2a15f590a9399886feaec4257')">
+            <img src="https://static.flow.com.ar/images/3545/CH_LOGO/60/40/0/0/92564610073951.png">
+            <p>ESPN Premium</p>
+        </div>
+    </div>
+
+    <script>
+        let player;
+        async function initPlayer() {
+            const video = document.getElementById('video');
+            player = new shaka.Player(video);
+            // Cargar América por defecto
+            cargarCanal('https://chromecast.cvattv.com.ar/live/c3eds/AmericaTV/SA_Live_dash_enc_C/AmericaTV.mpd', '8ea235ce0826408b221c498115a9b62d', '7aa9266ed91ea4510483370029dfcf45');
+        }
+
+        async function cargarCanal(url, keyID, keyVal) {
+            try {
+                await player.configure({
+                    drm: { clearKeys: { [keyID]: keyVal } }
+                });
+                await player.load(url);
+            } catch (e) { console.error("Error al cargar canal", e); }
+        }
+
+        document.addEventListener('DOMContentLoaded', initPlayer);
+    </script>
+</body>
+</html>
