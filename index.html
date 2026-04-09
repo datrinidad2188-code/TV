@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ÑATO TV Ultimate</title>
+    <title>ÑATO TV PRO</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
     <style>
-        body { margin: 0; background: #000; font-family: sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #000; }
+        body { margin: 0; background: #000; font-family: sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; }
+        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; }
         video { width: 100%; height: 100%; }
-        #menu { height: 150px; background: #111; overflow-x: auto; display: flex; padding: 10px; gap: 10px; border-top: 2px solid #ed1c24; }
-        .canal-card { min-width: 120px; background: #222; border-radius: 8px; padding: 5px; text-align: center; cursor: pointer; border: 1px solid #333; }
-        .canal-card:hover { background: #ed1c24; }
-        .canal-card img { width: 50px; height: 50px; object-fit: contain; }
-        .canal-card p { font-size: 12px; margin: 5px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #search-box { padding: 10px; background: #111; }
+        #search-box input { width: 95%; padding: 8px; border-radius: 5px; border: none; }
+        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 10px; background: #050505; }
+        .canal-card { background: #1a1a1a; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; }
+        .canal-card:hover { border-color: #ed1c24; }
+        .canal-card img { width: 100%; height: 50px; object-fit: contain; }
+        .canal-card p { font-size: 11px; margin-top: 5px; height: 30px; overflow: hidden; }
     </style>
 </head>
 <body>
@@ -22,42 +24,76 @@
         <video id="video" controls autoplay crossorigin="anonymous"></video>
     </div>
 
-    <div id="menu">
-        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c3eds/AmericaTV/SA_Live_dash_enc_C/AmericaTV.mpd', '8ea235ce0826408b221c498115a9b62d', '7aa9266ed91ea4510483370029dfcf45')">
-            <img src="https://static.flow.com.ar/images/66/CH_LOGO/60/40/0/0/60528493072631.png">
-            <p>América</p>
-        </div>
-
-        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c6eds/TelefeHD/SA_Live_dash_enc_C/TelefeHD.mpd', '3cec1b1ea9799dda5596e64f37e5ed20', 'c69f3afde2085dcaaaddbf55246a0323')">
-            <img src="https://static.flow.com.ar/images/69/CH_LOGO/60/40/0/0/65442435072354.png">
-            <p>Telefe</p>
-        </div>
-
-        <div class="canal-card" onclick="cargarCanal('https://chromecast.cvattv.com.ar/live/c7eds/Fox_Sports_Premiun_HD/SA_Live_dash_enc_C/Fox_Sports_Premiun_HD.mpd', '4c230dbc7f6a4bfa6ad0aa73ff792374', '4186a7c2a15f590a9399886feaec4257')">
-            <img src="https://static.flow.com.ar/images/3545/CH_LOGO/60/40/0/0/92564610073951.png">
-            <p>ESPN Premium</p>
-        </div>
+    <div id="search-box">
+        <input type="text" id="buscar" placeholder="Buscar canal..." onkeyup="filtrar()">
     </div>
+
+    <div id="lista-canales" id="contenedor"></div>
 
     <script>
         let player;
-        async function initPlayer() {
-            const video = document.getElementById('video');
+        const video = document.getElementById('video');
+
+        async function init() {
             player = new shaka.Player(video);
-            // Cargar América por defecto
-            cargarCanal('https://chromecast.cvattv.com.ar/live/c3eds/AmericaTV/SA_Live_dash_enc_C/AmericaTV.mpd', '8ea235ce0826408b221c498115a9b62d', '7aa9266ed91ea4510483370029dfcf45');
+            cargarLista();
         }
 
-        async function cargarCanal(url, keyID, keyVal) {
+        async function cargarLista() {
+            // AQUÍ: Poné el nombre exacto de tu archivo m3u o la URL si la tenés subida
+            const respuesta = await fetch('lista.m3u');
+            const texto = await respuesta.text();
+            interpretarM3U(texto);
+        }
+
+        function interpretarM3U(m3u) {
+            const lineas = m3u.split('\n');
+            const contenedor = document.getElementById('lista-canales');
+            
+            for (let i = 0; i < lineas.length; i++) {
+                if (lineas[i].startsWith('#EXTINF')) {
+                    const info = lineas[i];
+                    const url = lineas[i + 4] ? lineas[i + 4].trim() : ''; // Ajusta según tu m3u
+                    const drmInfo = lineas[i + 1] || ''; // Busca el KODIPROP
+                    
+                    // Extraer Nombre y Logo
+                    const nombre = info.split(',')[1];
+                    const logo = info.match(/tvg-logo="([^"]+)"/)?.[1] || '';
+                    
+                    // Extraer Llaves ClearKey
+                    const keyData = drmInfo.match(/input_helper_last_ticks.*?(\w+):(\w+)/);
+                    // O más simple buscando el formato ID:KEY
+                    const keys = drmInfo.match(/([a-f0-9]{32}):([a-f0-9]{32})/);
+
+                    if (url.includes('.mpd') && keys) {
+                        const card = document.createElement('div');
+                        card.className = 'canal-card';
+                        card.innerHTML = `<img src="${logo}"><p>${nombre}</p>`;
+                        card.onclick = () => reproducir(url, keys[1], keys[2]);
+                        contenedor.appendChild(card);
+                    }
+                }
+            }
+        }
+
+        async function reproducir(url, id, key) {
             try {
-                await player.configure({
-                    drm: { clearKeys: { [keyID]: keyVal } }
-                });
+                await player.configure({ drm: { clearKeys: { [id]: key } } });
                 await player.load(url);
-            } catch (e) { console.error("Error al cargar canal", e); }
+                window.scrollTo(0,0);
+            } catch (e) { console.error(e); }
         }
 
-        document.addEventListener('DOMContentLoaded', initPlayer);
+        function filtrar() {
+            let input = document.getElementById('buscar').value.toUpperCase();
+            let cards = document.getElementsByClassName('canal-card');
+            for (let card of cards) {
+                let txt = card.getElementsByTagName("p")[0].innerText;
+                card.style.display = txt.toUpperCase().indexOf(input) > -1 ? "" : "none";
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
