@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
     <style>
         body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 3px solid #ed1c24; }
+        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; }
         video { width: 100%; height: 100%; }
         #search-box { padding: 10px; background: #111; text-align: center; }
         #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; }
@@ -38,14 +38,10 @@
             shaka.polyfill.installAll();
             player = new shaka.Player(video);
             
-            // FILTRO DE RED REFORZADO
-            player.getNetworkingEngine().registerRequestFilter(function(type, request) {
-                // Forzamos el origen para que el servidor crea que estamos en la web oficial
-                request.headers['Origin'] = 'https://player.sensa.com.ar';
-                request.headers['Referer'] = 'https://player.sensa.com.ar/';
+            player.addEventListener('error', (e) => {
+                if(e.detail.code == 4032) console.error("Error 4032: El servidor bloqueó la conexión.");
             });
 
-            player.addEventListener('error', (e) => console.error("Error Shaka:", e.detail.code));
             cargarLista();
         }
 
@@ -65,8 +61,7 @@
             bloques.forEach((bloque, index) => {
                 if (!bloque.includes('http')) return;
                 
-                let urlMatch = bloque.match(/https?:\/\/[^\s|]+/);
-                let url = urlMatch ? urlMatch[0] : "";
+                let url = bloque.match(/https?:\/\/[^\s|]+/)?.[0] || "";
                 let nombre = bloque.split('\n')[0].split(',')[1] || "Canal";
                 let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "";
                 
@@ -75,7 +70,7 @@
 
                 const card = document.createElement('div');
                 card.className = 'canal-card';
-                card.innerHTML = `<img src="${logo}" onerror="this.src='https://via.placeholder.com/110x55?text=TV'"><p>${nombre.trim()}</p>`;
+                card.innerHTML = `<img src="${logo}"><p>${nombre.trim()}</p>`;
                 
                 card.onclick = () => reproducir(url, keys ? keys[1] : null, keys ? keys[2] : null);
                 contenedor.appendChild(card);
@@ -88,24 +83,15 @@
                 
                 const config = {
                     drm: {
-                        clearKeys: (id && key) ? { [id.trim()]: key.trim() } : {},
-                        advanced: {
-                            'org.w3.clearkey': { 'sessionType': 'temporary' }
-                        }
-                    },
-                    manifest: {
-                        dash: { ignoreMinBufferTime: true }
+                        clearKeys: (id && key) ? { [id.trim()]: key.trim() } : {}
                     }
                 };
 
                 await player.configure(config);
-                // Si el link tiene parámetros de Sensa, los mantenemos pero limpiamos el pipe
-                let finalUrl = url.split('|')[0].trim();
-                await player.load(finalUrl);
+                await player.load(url);
                 video.play();
             } catch (e) {
                 console.error("Fallo:", e.code);
-                // Si da error de licencia, intentamos sin DRM
                 if (e.code == 3016 && id) reproducir(url, null, null);
             }
         }
