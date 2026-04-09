@@ -7,20 +7,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
     <style>
         body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; position: sticky; top: 0; z-index: 100; }
+        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; }
         video { width: 100%; height: 100%; }
-        #search-box { padding: 15px; background: #111; text-align: center; }
-        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; font-size: 16px; }
-        #search-box input:focus { border-color: #ed1c24; }
-        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 15px; background: #050505; }
+        #search-box { padding: 10px; background: #111; text-align: center; }
+        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; }
+        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 15px; }
         .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.3s; }
         .canal-card:hover { border-color: #ed1c24; transform: scale(1.05); }
-        .canal-card img { width: 100%; height: 60px; object-fit: contain; border-radius: 5px; }
-        .canal-card p { font-size: 11px; margin: 8px 0 0; font-weight: bold; height: 28px; overflow: hidden; }
-        
-        /* Estilo Scroll */
-        #lista-canales::-webkit-scrollbar { width: 6px; }
-        #lista-canales::-webkit-scrollbar-thumb { background: #ed1c24; border-radius: 10px; }
+        .canal-card img { width: 100%; height: 55px; object-fit: contain; }
+        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; overflow: hidden; }
     </style>
 </head>
 <body>
@@ -30,7 +25,7 @@
     </div>
 
     <div id="search-box">
-        <input type="text" id="buscar" placeholder="Buscar canal en ÑATO TV..." onkeyup="filtrar()">
+        <input type="text" id="buscar" placeholder="Buscar canal..." onkeyup="filtrar()">
     </div>
 
     <div id="lista-canales"></div>
@@ -41,73 +36,69 @@
 
         async function init() {
             shaka.polyfill.installAll();
-            if (shaka.Player.isBrowserSupported()) {
-                player = new shaka.Player(video);
-                
-                // Configuración de robustez para Android y PC
-                player.configure({
-                    drm: {
-                        advanced: {
-                            'com.widevine.alpha': { 'videoRobustness': '', 'audioRobustness': '' },
-                            'org.w3.clearkey': { 'videoRobustness': '', 'audioRobustness': '' }
+            player = new shaka.Player(video);
+            
+            // CONFIGURACIÓN ESPECIAL PARA EVITAR ERROR 6012 Y 4032
+            player.configure({
+                drm: {
+                    clearKeys: {},
+                    servers: {},
+                    advanced: {
+                        'org.w3.clearkey': {
+                            'videoRobustness': '',
+                            'audioRobustness': '',
+                            'serverCertificate': null,
+                            'sessionType': 'temporary'
                         }
                     }
-                });
+                },
+                streaming: {
+                    bufferingGoal: 30,
+                    jumpLargeGaps: true
+                }
+            });
 
-                player.addEventListener('error', (e) => console.error("Error Shaka:", e.detail.code));
-                cargarLista();
-            }
+            player.addEventListener('error', (e) => {
+                console.error("Error Código:", e.detail.code, " - Ver mensaje arriba.");
+            });
+
+            cargarLista();
         }
 
         async function cargarLista() {
             try {
-                // Buscamos el archivo local
-                const respuesta = await fetch('lista.m3u');
-                const texto = await respuesta.text();
+                const res = await fetch('lista.m3u');
+                const texto = await res.text();
                 interpretarM3U(texto);
-            } catch (e) {
-                console.error("Error cargando lista.m3u:", e);
-                document.getElementById('lista-canales').innerHTML = "<p>Error: No se encontró lista.m3u</p>";
-            }
+            } catch (e) { console.error("No se halló lista.m3u"); }
         }
 
         function interpretarM3U(m3u) {
             const contenedor = document.getElementById('lista-canales');
             contenedor.innerHTML = "";
-            
-            // Dividimos por #EXTINF para separar cada bloque de canal
             const bloques = m3u.split('#EXTINF');
             
             bloques.forEach((bloque, index) => {
                 if (!bloque.includes('http')) return;
-
-                // 1. Extraer Nombre (lo que está después de la coma)
-                let lineas = bloque.split('\n');
-                let nombre = lineas[0].split(',')[1] || "Canal " + index;
-                nombre = nombre.replace(/#️⃣|🇦🇷/g, '').trim();
-
-                // 2. Extraer URL (limpiando el pipe | de Sensa)
-                let urlMatch = bloque.match(/https?:\/\/[^\s|]+/);
-                let url = urlMatch ? urlMatch[0] : "";
-
-                // 3. Extraer Logo
-                let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "https://via.placeholder.com/120x60?text=TV";
-
-                // 4. Extraer Llaves (formato hexadecimal 32:32)
-                // Buscamos en el bloque actual o en el bloque anterior (por si están arriba del #EXTINF)
+                
+                // Extraer URL (limpiando pipes de Sensa)
+                let url = bloque.match(/https?:\/\/[^\s|]+/)?.[0] || "";
+                let nombre = bloque.split('\n')[0].split(',')[1] || "Canal";
+                let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "";
+                
+                // Buscar llaves en este bloque o el anterior
                 const regexKeys = /([a-f0-9]{32}):([a-f0-9]{32})/i;
-                const keys = bloque.match(regexKeys) || (bloques[index-1] ? bloques[index-1].match(regexKeys) : null);
+                const keys = bloque.match(regexKeys) || (bloques[index-1]?.match(regexKeys));
 
                 const card = document.createElement('div');
                 card.className = 'canal-card';
-                card.innerHTML = `<img src="${logo}" onerror="this.src='https://via.placeholder.com/120x60?text=TV'"><p>${nombre}</p>`;
+                card.innerHTML = `<img src="${logo}"><p>${nombre.trim()}</p>`;
                 
                 card.onclick = () => {
                     if (keys) {
-                        console.log(`Reproduciendo ${nombre} con DRM.`);
+                        console.log("Cargando con ClearKey:", keys[1], keys[2]);
                         reproducir(url, keys[1], keys[2]);
                     } else {
-                        console.log(`Reproduciendo ${nombre} sin DRM.`);
                         reproducir(url);
                     }
                 };
@@ -117,25 +108,27 @@
 
         async function reproducir(url, id = null, key = null) {
             try {
-                const config = {
-                    drm: {
-                        clearKeys: (id && key) ? { [id.trim()]: key.trim() } : {}
-                    }
-                };
-                await player.configure(config);
+                if (id && key) {
+                    await player.configure({
+                        drm: { clearKeys: { [id.trim()]: key.trim() } }
+                    });
+                } else {
+                    await player.configure({ drm: { clearKeys: {} } });
+                }
+                
                 await player.load(url);
+                video.play();
                 window.scrollTo({top: 0, behavior: 'smooth'});
             } catch (e) {
-                console.error("Error al cargar canal:", e.code);
+                console.error("Fallo al reproducir:", e.code);
             }
         }
 
         function filtrar() {
-            let input = document.getElementById('buscar').value.toUpperCase();
+            let val = document.getElementById('buscar').value.toUpperCase();
             let cards = document.getElementsByClassName('canal-card');
-            for (let card of cards) {
-                let txt = card.innerText;
-                card.style.display = txt.toUpperCase().indexOf(input) > -1 ? "" : "none";
+            for (let c of cards) {
+                c.style.display = c.innerText.toUpperCase().includes(val) ? "" : "none";
             }
         }
 
