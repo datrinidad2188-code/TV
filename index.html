@@ -15,7 +15,7 @@
         .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.3s; }
         .canal-card:hover { border-color: #ed1c24; transform: scale(1.05); }
         .canal-card img { width: 100%; height: 55px; object-fit: contain; }
-        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; overflow: hidden; }
+        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -25,7 +25,7 @@
     </div>
 
     <div id="search-box">
-        <input type="text" id="buscar" placeholder="Buscar canal..." onkeyup="filtrar()">
+        <input type="text" id="buscar" placeholder="Buscar canal en ÑATO TV PRO..." onkeyup="filtrar()">
     </div>
 
     <div id="lista-canales"></div>
@@ -38,28 +38,8 @@
             shaka.polyfill.installAll();
             player = new shaka.Player(video);
             
-            // CONFIGURACIÓN ESPECIAL PARA EVITAR ERROR 6012 Y 4032
-            player.configure({
-                drm: {
-                    clearKeys: {},
-                    servers: {},
-                    advanced: {
-                        'org.w3.clearkey': {
-                            'videoRobustness': '',
-                            'audioRobustness': '',
-                            'serverCertificate': null,
-                            'sessionType': 'temporary'
-                        }
-                    }
-                },
-                streaming: {
-                    bufferingGoal: 30,
-                    jumpLargeGaps: true
-                }
-            });
-
             player.addEventListener('error', (e) => {
-                console.error("Error Código:", e.detail.code, " - Ver mensaje arriba.");
+                console.error("Error Shaka:", e.detail.code);
             });
 
             cargarLista();
@@ -70,7 +50,7 @@
                 const res = await fetch('lista.m3u');
                 const texto = await res.text();
                 interpretarM3U(texto);
-            } catch (e) { console.error("No se halló lista.m3u"); }
+            } catch (e) { console.error("Error cargando lista"); }
         }
 
         function interpretarM3U(m3u) {
@@ -81,44 +61,54 @@
             bloques.forEach((bloque, index) => {
                 if (!bloque.includes('http')) return;
                 
-                // Extraer URL (limpiando pipes de Sensa)
                 let url = bloque.match(/https?:\/\/[^\s|]+/)?.[0] || "";
                 let nombre = bloque.split('\n')[0].split(',')[1] || "Canal";
                 let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "";
                 
-                // Buscar llaves en este bloque o el anterior
                 const regexKeys = /([a-f0-9]{32}):([a-f0-9]{32})/i;
                 const keys = bloque.match(regexKeys) || (bloques[index-1]?.match(regexKeys));
 
                 const card = document.createElement('div');
                 card.className = 'canal-card';
-                card.innerHTML = `<img src="${logo}"><p>${nombre.trim()}</p>`;
+                card.innerHTML = `<img src="${logo}" onerror="this.src='https://via.placeholder.com/110x55?text=TV'"><p>${nombre.trim()}</p>`;
                 
                 card.onclick = () => {
                     if (keys) {
-                        console.log("Cargando con ClearKey:", keys[1], keys[2]);
+                        console.log("Canal con llaves detectado.");
                         reproducir(url, keys[1], keys[2]);
                     } else {
-                        reproducir(url);
+                        console.log("Canal libre detectado.");
+                        reproducir(url, null, null);
                     }
                 };
                 contenedor.appendChild(card);
             });
         }
 
-        async function reproducir(url, id = null, key = null) {
+        async function reproducir(url, id, key) {
             try {
+                // RESET TOTAL DEL PLAYER para que no queden restos de llaves anteriores
+                await player.unload(); 
+
                 if (id && key) {
+                    // Si tiene llaves, configuramos el DRM
                     await player.configure({
-                        drm: { clearKeys: { [id.trim()]: key.trim() } }
+                        drm: {
+                            clearKeys: { [id.trim()]: key.trim() },
+                            advanced: {
+                                'org.w3.clearkey': { 'sessionType': 'temporary' }
+                            }
+                        }
                     });
                 } else {
-                    await player.configure({ drm: { clearKeys: {} } });
+                    // Si NO tiene llaves, limpiamos toda la config de DRM
+                    await player.configure({
+                        drm: { clearKeys: {}, servers: {}, advanced: {} }
+                    });
                 }
                 
                 await player.load(url);
                 video.play();
-                window.scrollTo({top: 0, behavior: 'smooth'});
             } catch (e) {
                 console.error("Fallo al reproducir:", e.code);
             }
