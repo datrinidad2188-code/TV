@@ -6,21 +6,16 @@
     <title>ÑATO TV PRO</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
     <style>
-        body { margin: 0; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 3px solid #ed1c24; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 10px rgba(237, 28, 36, 0.4); }
+        body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 3px solid #ed1c24; }
         video { width: 100%; height: 100%; }
-        #search-box { padding: 12px; background: #111; text-align: center; }
-        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; font-size: 16px; transition: 0.3s; }
-        #search-box input:focus { border-color: #ed1c24; }
-        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; padding: 15px; background: #050505; }
-        .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.3s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .canal-card:hover { border-color: #ed1c24; transform: translateY(-3px); background: #222; }
-        .canal-card img { width: 100%; height: 55px; object-fit: contain; border-radius: 5px; }
-        .canal-card p { font-size: 11px; margin: 8px 0 0; font-weight: bold; color: #eee; line-height: 1.2; height: 26px; overflow: hidden; }
-        
-        /* Personalización del Scroll */
-        #lista-canales::-webkit-scrollbar { width: 6px; }
-        #lista-canales::-webkit-scrollbar-thumb { background: #ed1c24; border-radius: 10px; }
+        #search-box { padding: 10px; background: #111; text-align: center; }
+        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; }
+        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 15px; }
+        .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.3s; }
+        .canal-card:hover { border-color: #ed1c24; transform: scale(1.05); }
+        .canal-card img { width: 100%; height: 55px; object-fit: contain; }
+        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -30,7 +25,7 @@
     </div>
 
     <div id="search-box">
-        <input type="text" id="buscar" placeholder="Buscar canal en ÑATO TV PRO..." onkeyup="filtrar()">
+        <input type="text" id="buscar" placeholder="Buscando en ÑATO TV PRO..." onkeyup="filtrar()">
     </div>
 
     <div id="lista-canales"></div>
@@ -41,35 +36,27 @@
 
         async function init() {
             shaka.polyfill.installAll();
-            if (shaka.Player.isBrowserSupported()) {
-                player = new shaka.Player(video);
-                
-                // Configuración básica contra errores de licencia
-                player.configure({
-                    drm: {
-                        advanced: {
-                            'com.widevine.alpha': { 'videoRobustness': '', 'audioRobustness': '' },
-                            'org.w3.clearkey': { 'videoRobustness': '', 'audioRobustness': '' }
-                        }
-                    }
-                });
+            player = new shaka.Player(video);
+            
+            // CONFIGURACIÓN DE RED PARA "ENGAÑAR" AL SERVIDOR
+            player.getNetworkingEngine().registerRequestFilter(function(type, request) {
+                // Si el link es de sensa o colsecor, le mandamos los datos de la app oficial
+                if (request.uris[0].includes('sensa') || request.uris[0].includes('colsecor')) {
+                    request.headers['Referer'] = 'https://player.sensa.com.ar/';
+                    request.headers['Origin'] = 'https://player.sensa.com.ar';
+                }
+            });
 
-                player.addEventListener('error', (e) => console.error("Error Shaka:", e.detail.code));
-                cargarLista();
-            } else {
-                alert("Tu navegador no soporta este reproductor.");
-            }
+            player.addEventListener('error', (e) => console.error("Error Shaka:", e.detail.code));
+            cargarLista();
         }
 
         async function cargarLista() {
             try {
-                const respuesta = await fetch('lista.m3u');
-                const texto = await respuesta.text();
+                const res = await fetch('lista.m3u');
+                const texto = await res.text();
                 interpretarM3U(texto);
-            } catch (e) {
-                console.error("Error al cargar lista.m3u:", e);
-                document.getElementById('lista-canales').innerHTML = "<p style='text-align:center'>Error: No se encontró lista.m3u</p>";
-            }
+            } catch (e) { console.error("Fallo lista"); }
         }
 
         function interpretarM3U(m3u) {
@@ -79,78 +66,52 @@
             
             bloques.forEach((bloque, index) => {
                 if (!bloque.includes('http')) return;
-
-                let nombre = bloque.split('\n')[0].split(',')[1] || "Canal " + index;
-                nombre = nombre.replace(/#️⃣|🇦🇷/g, '').trim();
                 
                 let urlMatch = bloque.match(/https?:\/\/[^\s|]+/);
                 let url = urlMatch ? urlMatch[0] : "";
+                let nombre = bloque.split('\n')[0].split(',')[1] || "Canal";
+                let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "";
                 
-                let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "https://via.placeholder.com/110x55?text=TV";
-
                 const regexKeys = /([a-f0-9]{32}):([a-f0-9]{32})/i;
-                const keys = bloque.match(regexKeys) || (bloques[index-1] ? bloques[index-1].match(regexKeys) : null);
+                const keys = bloque.match(regexKeys) || (bloques[index-1]?.match(regexKeys));
 
                 const card = document.createElement('div');
                 card.className = 'canal-card';
-                card.innerHTML = `<img src="${logo}" onerror="this.src='https://via.placeholder.com/110x55?text=TV'"><p>${nombre}</p>`;
+                card.innerHTML = `<img src="${logo}" onerror="this.src='https://via.placeholder.com/110x55?text=TV'"><p>${nombre.trim()}</p>`;
                 
-                card.onclick = () => {
-                    if (keys) {
-                        reproducir(url, keys[1], keys[2]);
-                    } else {
-                        reproducir(url);
-                    }
-                };
+                card.onclick = () => reproducir(url, keys ? keys[1] : null, keys ? keys[2] : null);
                 contenedor.appendChild(card);
             });
         }
 
-        async function reproducir(url, id = null, key = null) {
+        async function reproducir(url, id, key) {
             try {
-                let urlFinal = url.split('|')[0].trim(); // Limpieza para Sensa
-                await player.unload(); // Reset para evitar contaminación de errores
-
-                // Filtro de red para evitar bloqueos de servidor
-                player.getNetworkingEngine().registerRequestFilter(function(type, request) {
-                    if (type == shaka.net.NetworkingEngine.RequestType.MANIFEST) {
-                        // Aquí se pueden añadir cabeceras si fuera necesario
-                    }
-                });
-
-                if (id && key) {
-                    await player.configure({
-                        drm: {
-                            clearKeys: { [id.trim()]: key.trim() },
-                            advanced: {
-                                'org.w3.clearkey': { 'sessionType': 'temporary' }
-                            }
-                        }
-                    });
-                } else {
-                    await player.configure({ drm: { clearKeys: {} } });
-                }
+                await player.unload();
                 
-                await player.load(urlFinal);
-                video.play();
-                window.scrollTo({top: 0, behavior: 'smooth'});
+                const config = {
+                    drm: {
+                        clearKeys: (id && key) ? { [id.trim()]: key.trim() } : {},
+                        advanced: {
+                            'org.w3.clearkey': { 'sessionType': 'temporary' }
+                        }
+                    }
+                };
 
+                await player.configure(config);
+                await player.load(url);
+                video.play();
             } catch (e) {
-                console.error("Fallo reproducción. Código:", e.code);
-                // Si falla por licencia (3016) y tiene llaves, intentamos sin ellas por si acaso
-                if (e.code == 3016 && id) {
-                    console.log("Reintentando modo libre...");
-                    reproducir(url, null, null);
-                }
+                console.error("Fallo:", e.code);
+                // Si falla por licencia (3016) reintentamos sin llaves por si es un link libre
+                if (e.code == 3016 && id) reproducir(url, null, null);
             }
         }
 
         function filtrar() {
-            let input = document.getElementById('buscar').value.toUpperCase();
+            let val = document.getElementById('buscar').value.toUpperCase();
             let cards = document.getElementsByClassName('canal-card');
-            for (let card of cards) {
-                let txt = card.innerText;
-                card.style.display = txt.toUpperCase().indexOf(input) > -1 ? "" : "none";
+            for (let c of cards) {
+                c.style.display = c.innerText.toUpperCase().includes(val) ? "" : "none";
             }
         }
 
