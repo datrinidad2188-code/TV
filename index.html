@@ -38,13 +38,11 @@
             shaka.polyfill.installAll();
             player = new shaka.Player(video);
             
-            // CONFIGURACIÓN DE RED PARA "ENGAÑAR" AL SERVIDOR
+            // FILTRO DE RED REFORZADO
             player.getNetworkingEngine().registerRequestFilter(function(type, request) {
-                // Si el link es de sensa o colsecor, le mandamos los datos de la app oficial
-                if (request.uris[0].includes('sensa') || request.uris[0].includes('colsecor')) {
-                    request.headers['Referer'] = 'https://player.sensa.com.ar/';
-                    request.headers['Origin'] = 'https://player.sensa.com.ar';
-                }
+                // Forzamos el origen para que el servidor crea que estamos en la web oficial
+                request.headers['Origin'] = 'https://player.sensa.com.ar';
+                request.headers['Referer'] = 'https://player.sensa.com.ar/';
             });
 
             player.addEventListener('error', (e) => console.error("Error Shaka:", e.detail.code));
@@ -94,15 +92,20 @@
                         advanced: {
                             'org.w3.clearkey': { 'sessionType': 'temporary' }
                         }
+                    },
+                    manifest: {
+                        dash: { ignoreMinBufferTime: true }
                     }
                 };
 
                 await player.configure(config);
-                await player.load(url);
+                // Si el link tiene parámetros de Sensa, los mantenemos pero limpiamos el pipe
+                let finalUrl = url.split('|')[0].trim();
+                await player.load(finalUrl);
                 video.play();
             } catch (e) {
                 console.error("Fallo:", e.code);
-                // Si falla por licencia (3016) reintentamos sin llaves por si es un link libre
+                // Si da error de licencia, intentamos sin DRM
                 if (e.code == 3016 && id) reproducir(url, null, null);
             }
         }
