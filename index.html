@@ -69,21 +69,21 @@
     <input type="text" id="buscar" placeholder="Buscando en ÑATO TV PRO..." onkeyup="filtrar()">
 </div>
 
-<div id="lista-canales"></div>
+<div id="lista-canales">
+    <p id="mensaje-carga" style="text-align: center; margin-top: 20px;">Cargando lista de canales...</p>
+</div>
 
 <script>
     let player;
     let dataCanales = [];
 
     async function init() {
-        // Instalar polyfills para compatibilidad
         shaka.polyfill.installAll();
         const video = document.getElementById('video');
         player = new shaka.Player(video);
 
-        // Manejo de errores
         player.addEventListener('error', (e) => {
-            if(e.detail.code == 4032) console.error("Error: El servidor bloqueó la conexión.");
+            console.error("Error del reproductor:", e.detail);
         });
 
         cargarCanales();
@@ -93,10 +93,17 @@
         const urlRaw = 'https://raw.githubusercontent.com/datrinidad2188-code/TV/main/lista.m3u';
         try {
             const response = await fetch(urlRaw);
-            dataCanales = await response.json();
+            // Forzamos la lectura como texto para evitar errores de formato
+            const texto = await response.text();
+            dataCanales = JSON.parse(texto); 
+            
+            const msj = document.getElementById('mensaje-carga');
+            if(msj) msj.remove(); // Quitamos el mensaje de carga
+            
             mostrarCanales(dataCanales);
         } catch (error) {
             console.error("Error cargando la lista:", error);
+            document.getElementById('lista-canales').innerHTML = '<p style="text-align:center">Error al cargar la lista. Verifica el archivo lista.m3u en GitHub.</p>';
         }
     }
 
@@ -121,7 +128,7 @@
             window.scrollTo({top: 0, behavior: 'smooth'});
         } catch (e) {
             console.error('Error al reproducir:', e);
-            alert("No se pudo cargar este canal. Puede que la señal esté caída.");
+            alert("No se pudo cargar este canal. Es posible que el enlace haya expirado.");
         }
     }
 
