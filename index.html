@@ -4,107 +4,135 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ÑATO TV PRO</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.debug.js"></script>
     <style>
-        body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; }
+        body { 
+            margin: 0; 
+            background: #000; 
+            font-family: 'Segoe UI', sans-serif; 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+        }
+        #player-container { 
+            width: 100%; 
+            aspect-ratio: 16/9; 
+            background: #000; 
+            border-bottom: 2px solid #ed1c24; 
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
         video { width: 100%; height: 100%; }
+        
         #search-box { padding: 10px; background: #111; text-align: center; }
-        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; outline: none; }
-        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 15px; }
-        .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.3s; }
+        #search-box input { 
+            width: 90%; 
+            padding: 12px; 
+            border-radius: 25px; 
+            border: 1px solid #333; 
+            background: #222; 
+            color: white; 
+            outline: none; 
+        }
+
+        #lista-canales { 
+            flex-grow: 1; 
+            overflow-y: auto; 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); 
+            gap: 10px; 
+            padding: 15px; 
+        }
+        .canal-card { 
+            background: #1a1a1a; 
+            border-radius: 12px; 
+            padding: 10px; 
+            text-align: center; 
+            cursor: pointer; 
+            border: 1px solid #333; 
+            transition: 0.2s;
+        }
         .canal-card:hover { border-color: #ed1c24; transform: scale(1.05); }
         .canal-card img { width: 100%; height: 55px; object-fit: contain; }
-        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; }
+        .canal-card p { font-size: 11px; margin-top: 5px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
 </head>
 <body>
 
-    <div id="player-container">
-        <video id="video" controls autoplay crossorigin="anonymous"></video>
-    </div>
+<div id="player-container">
+    <video id="video" controls autoplay crossorigin="anonymous"></video>
+</div>
 
-    <div id="search-box">
-        <input type="text" id="buscar" placeholder="Buscando en ÑATO TV PRO..." onkeyup="filtrar()">
-    </div>
+<div id="search-box">
+    <input type="text" id="buscar" placeholder="Buscando en ÑATO TV PRO..." onkeyup="filtrar()">
+</div>
 
-    <div id="lista-canales"></div>
+<div id="lista-canales"></div>
 
-    <script>
-        let player;
+<script>
+    let player;
+    let dataCanales = [];
+
+    async function init() {
+        // Instalar polyfills para compatibilidad
+        shaka.polyfill.installAll();
         const video = document.getElementById('video');
+        player = new shaka.Player(video);
 
-        async function init() {
-            shaka.polyfill.installAll();
-            player = new shaka.Player(video);
-            
-            player.addEventListener('error', (e) => {
-                if(e.detail.code == 4032) console.error("Error 4032: El servidor bloqueó la conexión.");
-            });
+        // Manejo de errores
+        player.addEventListener('error', (e) => {
+            if(e.detail.code == 4032) console.error("Error: El servidor bloqueó la conexión.");
+        });
 
-            cargarLista();
+        cargarCanales();
+    }
+
+    async function cargarCanales() {
+        const urlRaw = 'https://raw.githubusercontent.com/datrinidad2188-code/TV/main/lista.m3u';
+        try {
+            const response = await fetch(urlRaw);
+            dataCanales = await response.json();
+            mostrarCanales(dataCanales);
+        } catch (error) {
+            console.error("Error cargando la lista:", error);
         }
+    }
 
-        async function cargarLista() {
-            try {
-                const res = await fetch('lista.m3u');
-                const texto = await res.text();
-                interpretarM3U(texto);
-            } catch (e) { console.error("Fallo lista"); }
+    function mostrarCanales(lista) {
+        const contenedor = document.getElementById('lista-canales');
+        contenedor.innerHTML = '';
+        lista.forEach(canal => {
+            const card = document.createElement('div');
+            card.className = 'canal-card';
+            card.innerHTML = `
+                <img src="${canal.logo}" onerror="this.src='https://via.placeholder.com/100x60?text=TV'">
+                <p>${canal.nombre}</p>
+            `;
+            card.onclick = () => reproducir(canal.url);
+            contenedor.appendChild(card);
+        });
+    }
+
+    async function reproducir(url) {
+        try {
+            await player.load(url);
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        } catch (e) {
+            console.error('Error al reproducir:', e);
+            alert("No se pudo cargar este canal. Puede que la señal esté caída.");
         }
+    }
 
-        function interpretarM3U(m3u) {
-            const contenedor = document.getElementById('lista-canales');
-            contenedor.innerHTML = "";
-            const bloques = m3u.split('#EXTINF');
-            
-            bloques.forEach((bloque, index) => {
-                if (!bloque.includes('http')) return;
-                
-                let url = bloque.match(/https?:\/\/[^\s|]+/)?.[0] || "";
-                let nombre = bloque.split('\n')[0].split(',')[1] || "Canal";
-                let logo = bloque.match(/tvg-logo="([^"]+)"/)?.[1] || "";
-                
-                const regexKeys = /([a-f0-9]{32}):([a-f0-9]{32})/i;
-                const keys = bloque.match(regexKeys) || (bloques[index-1]?.match(regexKeys));
+    function filtrar() {
+        const texto = document.getElementById('buscar').value.toLowerCase();
+        const filtrados = dataCanales.filter(c => c.nombre.toLowerCase().includes(texto));
+        mostrarCanales(filtrados);
+    }
 
-                const card = document.createElement('div');
-                card.className = 'canal-card';
-                card.innerHTML = `<img src="${logo}"><p>${nombre.trim()}</p>`;
-                
-                card.onclick = () => reproducir(url, keys ? keys[1] : null, keys ? keys[2] : null);
-                contenedor.appendChild(card);
-            });
-        }
+    document.addEventListener('DOMContentLoaded', init);
+</script>
 
-        async function reproducir(url, id, key) {
-            try {
-                await player.unload();
-                
-                const config = {
-                    drm: {
-                        clearKeys: (id && key) ? { [id.trim()]: key.trim() } : {}
-                    }
-                };
-
-                await player.configure(config);
-                await player.load(url);
-                video.play();
-            } catch (e) {
-                console.error("Fallo:", e.code);
-                if (e.code == 3016 && id) reproducir(url, null, null);
-            }
-        }
-
-        function filtrar() {
-            let val = document.getElementById('buscar').value.toUpperCase();
-            let cards = document.getElementsByClassName('canal-card');
-            for (let c of cards) {
-                c.style.display = c.innerText.toUpperCase().includes(val) ? "" : "none";
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
 </body>
 </html>
