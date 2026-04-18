@@ -6,15 +6,17 @@
     <title>ÑATO TV PRO</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.debug.js"></script>
     <style>
-        body { margin: 0; background: #000; font-family: sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; }
+        body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; color: white; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #player-container { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 2px solid #ed1c24; position: sticky; top: 0; }
         video { width: 100%; height: 100%; }
-        #search-box { padding: 10px; background: #111; }
-        #search-box input { width: 95%; padding: 10px; border-radius: 20px; border: none; background: #222; color: white; display: block; margin: auto; }
-        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 15px; align-content: start; }
-        .canal-card { background: #1a1a1a; border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; }
-        .canal-card img { width: 100%; height: 50px; object-fit: contain; }
-        .canal-card p { font-size: 10px; margin: 5px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #search-box { padding: 12px; background: #111; }
+        #search-box input { width: 90%; padding: 12px; border-radius: 25px; border: 1px solid #333; background: #222; color: white; display: block; margin: auto; outline: none; }
+        #lista-canales { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; padding: 15px; }
+        .canal-card { background: #1a1a1a; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; border: 1px solid #333; transition: 0.2s; }
+        .canal-card:hover { border-color: #ed1c24; transform: scale(1.05); }
+        .canal-card img { width: 100%; height: 55px; object-fit: contain; border-radius: 4px; }
+        .canal-card p { font-size: 11px; margin-top: 8px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #status { text-align: center; margin-top: 20px; color: #888; }
     </style>
 </head>
 <body>
@@ -24,56 +26,71 @@
 </div>
 
 <div id="search-box">
-    <input type="text" id="buscar" placeholder="Buscar canal..." onkeyup="filtrar()">
+    <input type="text" id="buscar" placeholder="Buscar en ÑATO TV..." onkeyup="filtrar()">
 </div>
 
 <div id="lista-canales">
-    <p id="status">Cargando canales...</p>
+    <p id="status">Cargando grilla de canales...</p>
 </div>
 
 <script>
     let player;
     let dataCanales = [];
-    // ESTE ES EL LINK CORREGIDO
-    const urlLista = 'https://gist.githubusercontent.com/datrinidad2188-code/c37dd47eb80a4b96ba2c7f9195ac7f4f/raw/02430eeeac10eeadc3d9a1c6a2588147d34b22c8/lista.m3u';
+    // Usamos el archivo local de tu repositorio
+    const urlLista = 'lista.m3u';
 
     async function init() {
         shaka.polyfill.installAll();
-        player = new shaka.Player(document.getElementById('video'));
-        
+        const video = document.getElementById('video');
+        player = new shaka.Player(video);
+
         try {
-            const res = await fetch(urlLista);
-            const data = await res.json();
-            dataCanales = data;
-            document.getElementById('status').remove();
+            const response = await fetch(urlLista);
+            if (!response.ok) throw new Error('No se pudo leer la lista');
+            
+            // Leemos el contenido como texto primero
+            const texto = await response.text();
+            // Lo convertimos a objeto (JSON)
+            dataCanales = JSON.parse(texto);
+            
+            const statusLabel = document.getElementById('status');
+            if(statusLabel) statusLabel.remove();
+            
             mostrar(dataCanales);
         } catch (e) {
-            document.getElementById('status').innerText = "Error de conexión con la lista.";
+            console.error(e);
+            document.getElementById('status').innerText = "Error: Revisa que lista.m3u esté en la misma carpeta que index.html";
         }
     }
 
     function mostrar(lista) {
         const cont = document.getElementById('lista-canales');
         cont.innerHTML = '';
-        lista.forEach((c, index) => {
-            const div = document.createElement('div');
-            div.className = 'canal-card';
-            div.innerHTML = `<img src="${c.logo}"><p>${c.nombre}</p>`;
-            div.onclick = () => reproducir(c.url);
-            cont.appendChild(div);
+        lista.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'canal-card';
+            card.innerHTML = `
+                <img src="${c.logo}" onerror="this.src='https://via.placeholder.com/100x60?text=TV'">
+                <p>${c.nombre}</p>
+            `;
+            card.onclick = () => reproducir(c.url);
+            cont.appendChild(card);
         });
     }
 
     async function reproducir(url) {
         try {
             await player.load(url);
-            document.getElementById('player-container').scrollIntoView({behavior: 'smooth'});
-        } catch (e) { alert("Señal caída temporalmente."); }
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        } catch (e) {
+            alert("La señal no está disponible en este momento.");
+        }
     }
 
     function filtrar() {
         const term = document.getElementById('buscar').value.toLowerCase();
-        mostrar(dataCanales.filter(c => c.nombre.toLowerCase().includes(term)));
+        const filtrados = dataCanales.filter(c => c.nombre.toLowerCase().includes(term));
+        mostrar(filtrados);
     }
 
     document.addEventListener('DOMContentLoaded', init);
